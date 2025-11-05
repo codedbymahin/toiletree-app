@@ -74,7 +74,7 @@ module.exports = {
       EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
       eas: {
-        projectId: 'your-project-id-here',
+        projectId: 'd9ee245e-3e2d-4184-99c8-6df1a464be2d',
       },
     },
   },
