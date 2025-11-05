@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "toiletree",
+    "name": "Toiletree",
     "slug": "toiletree",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,18 +13,60 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.toiletree.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Toiletree needs your location to show nearby public toilets and help you submit new locations.",
+        "NSCameraUsageDescription": "Toiletree needs camera access to take photos of toilet facilities.",
+        "NSPhotoLibraryUsageDescription": "Toiletree needs photo library access to upload photos of toilet facilities."
+      },
+      "config": {
+        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+      }
     },
     "android": {
+      "package": "com.toiletree.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Toiletree to use your location to find nearby toilets."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Toiletree to access your photos to upload toilet images.",
+          "cameraPermission": "Allow Toiletree to access your camera to take photos of toilets."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
     }
   }
 }

@@ -1,0 +1,283 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Alert,
+  RefreshControl,
+} from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { Toilet } from '../types';
+import { toiletsService } from '../services/toilets';
+import { LoadingSpinner, StarRating } from '../components';
+import { RootStackParamList } from '../navigation/types';
+import { useAuth } from '../context/AuthContext';
+
+type ToiletListNavigationProp = StackNavigationProp<RootStackParamList, 'ToiletList'>;
+
+export const ToiletListScreen = () => {
+  const navigation = useNavigation<ToiletListNavigationProp>();
+  const { user } = useAuth();
+  const [toilets, setToilets] = useState<Toilet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    loadToilets();
+  }, []);
+
+  const loadToilets = async () => {
+    const { toilets: fetchedToilets, error } = await toiletsService.getToilets();
+    
+    if (error) {
+      Alert.alert('Error', 'Failed to load toilets');
+    } else {
+      setToilets(fetchedToilets);
+    }
+    setLoading(false);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadToilets();
+    setRefreshing(false);
+  };
+
+  const handleToiletPress = (toilet: Toilet) => {
+    navigation.navigate('ToiletDetails', {
+      toiletId: toilet.id,
+      toilet,
+    });
+  };
+
+  const renderToiletCard = ({ item }: { item: Toilet }) => (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => handleToiletPress(item)}
+      activeOpacity={0.7}
+    >
+      {item.photo_url ? (
+        <Image
+          source={{ uri: item.photo_url }}
+          style={styles.cardImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.placeholderImage}>
+          <MaterialCommunityIcons name="toilet" size={64} color="#9CA3AF" />
+        </View>
+      )}
+
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={styles.cardAddress} numberOfLines={2}>
+          {item.address}
+        </Text>
+
+        {/* Feature Tags */}
+        <View style={styles.tagsContainer}>
+          {item.is_female_friendly && (
+            <View style={styles.tagFemaleFriendly}>
+              <Text style={styles.tagText}>♀️ Female Friendly</Text>
+            </View>
+          )}
+          {item.has_water_access && (
+            <View style={styles.tagWater}>
+              <Text style={styles.tagText}>💧 Water</Text>
+            </View>
+          )}
+          {item.is_paid && (
+            <View style={styles.tagPaid}>
+              <Text style={styles.tagText}>💰 Paid</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Rating */}
+        {item.average_rating !== undefined && item.average_rating > 0 && (
+          <View style={styles.ratingContainer}>
+            <StarRating rating={item.average_rating} size={16} showNumber />
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
+  if (loading) {
+    return <LoadingSpinner message="Loading toilets..." />;
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            // Explicitly navigate to Map screen to prevent crashes
+            // Navigate to the appropriate tab navigator based on auth state
+            if (user) {
+              (navigation as any).navigate('MainTabs', { screen: 'Map' });
+            } else {
+              (navigation as any).navigate('GuestTabs', { screen: 'Map' });
+            }
+          }}
+        >
+          <MaterialCommunityIcons name="map" size={20} color="#2563EB" style={{ marginRight: 8 }} />
+          <Text style={styles.backText}>Back to Map</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {toilets.length} Toilet{toilets.length !== 1 ? 's' : ''} Found
+        </Text>
+      </View>
+
+      {/* Toilet List */}
+      <FlatList
+        data={toilets}
+        renderItem={renderToiletCard}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="toilet" size={64} color="#9CA3AF" style={{ marginBottom: 16 }} />
+            <Text style={styles.emptyText}>No toilets found</Text>
+            <Text style={styles.emptySubtext}>
+              Be the first to submit one!
+            </Text>
+          </View>
+        }
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+  },
+  header: {
+    backgroundColor: '#fff',
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  backText: {
+    fontSize: 16,
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+  headerTitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  listContent: {
+    padding: 16,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardImage: {
+    width: '100%',
+    height: 180,
+  },
+  placeholderImage: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardContent: {
+    padding: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 6,
+  },
+  cardAddress: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  tagFemaleFriendly: {
+    backgroundColor: '#FCE7F3',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  tagWater: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  tagPaid: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  tagText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  ratingContainer: {
+    marginTop: 4,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+});
+

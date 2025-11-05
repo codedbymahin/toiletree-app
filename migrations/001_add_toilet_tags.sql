@@ -1,0 +1,19 @@
+-- Migration: Add feature tags to toilets table
+
+ALTER TABLE toilets
+ADD COLUMN IF NOT EXISTS is_female_friendly BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE toilets
+ADD COLUMN IF NOT EXISTS has_water_access BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE toilets
+ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE toilet_submissions
+ADD COLUMN IF NOT EXISTS is_female_friendly BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE toilet_submissions
+ADD COLUMN IF NOT EXISTS has_water_access BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE toilet_submissions
+ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE;
