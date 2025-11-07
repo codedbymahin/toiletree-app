@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import MapView, { Region } from 'react-native-maps';
+import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
@@ -18,22 +18,21 @@ export { ToiletListScreen } from './ToiletListScreen';
 
 type SubmitNavigationProp = StackNavigationProp<SubmitStackParamList, 'SelectLocation'>;
 
-const FALLBACK_REGION: Region = {
+const FALLBACK_LOCATION = {
   latitude: 37.7749,
   longitude: -122.4194,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
 };
 
 export const SelectLocationScreen = () => {
   const navigation = useNavigation<SubmitNavigationProp>();
-  const [region, setRegion] = useState<Region | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
-  const mapRef = useRef<MapView | null>(null);
+  const [cameraCenter, setCameraCenter] = useState<[number, number] | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(14);
+  const cameraRef = useRef<Mapbox.Camera>(null);
 
   useEffect(() => {
     const initializeLocation = async () => {
@@ -45,37 +44,29 @@ export const SelectLocationScreen = () => {
             'Location Permission',
             'Location access is required to center the map on your position. You can still select a location manually.'
           );
-          setRegion(FALLBACK_REGION);
-          setSelectedLocation({
-            latitude: FALLBACK_REGION.latitude,
-            longitude: FALLBACK_REGION.longitude,
-          });
+          setSelectedLocation(FALLBACK_LOCATION);
+          setCameraCenter([FALLBACK_LOCATION.longitude, FALLBACK_LOCATION.latitude]);
+          setZoomLevel(14);
           setLoading(false);
           return;
         }
 
         const location = await Location.getCurrentPositionAsync({});
-        const nextRegion: Region = {
+        const initialLocation = {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
         };
 
-        setRegion(nextRegion);
-        setSelectedLocation({
-          latitude: nextRegion.latitude,
-          longitude: nextRegion.longitude,
-        });
+        setSelectedLocation(initialLocation);
+        setCameraCenter([initialLocation.longitude, initialLocation.latitude]);
+        setZoomLevel(14);
         setLoading(false);
       } catch (error) {
         console.error('Failed to get current location', error);
         Alert.alert('Error', 'Unable to fetch your current location. Please move the map to select a spot.');
-        setRegion(FALLBACK_REGION);
-        setSelectedLocation({
-          latitude: FALLBACK_REGION.latitude,
-          longitude: FALLBACK_REGION.longitude,
-        });
+        setSelectedLocation(FALLBACK_LOCATION);
+        setCameraCenter([FALLBACK_LOCATION.longitude, FALLBACK_LOCATION.latitude]);
+        setZoomLevel(14);
         setLoading(false);
       }
     };
@@ -83,23 +74,30 @@ export const SelectLocationScreen = () => {
     initializeLocation();
   }, []);
 
-  const handleRegionChangeComplete = (nextRegion: Region) => {
-    setRegion(nextRegion);
-    setSelectedLocation({ latitude: nextRegion.latitude, longitude: nextRegion.longitude });
-  };
+  // Update selected location when camera center changes
+  useEffect(() => {
+    if (cameraCenter) {
+      const [longitude, latitude] = cameraCenter;
+      setSelectedLocation({ latitude, longitude });
+    }
+  }, [cameraCenter]);
 
   const recenterOnUser = async () => {
     try {
       const location = await Location.getCurrentPositionAsync({});
-      const nextRegion: Region = {
+      const newLocation = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
       };
-      setRegion(nextRegion);
-      setSelectedLocation({ latitude: nextRegion.latitude, longitude: nextRegion.longitude });
-      mapRef.current?.animateToRegion(nextRegion, 500);
+      setSelectedLocation(newLocation);
+      
+      if (cameraRef.current) {
+        cameraRef.current.setCamera({
+          centerCoordinate: [newLocation.longitude, newLocation.latitude],
+          zoomLevel: 14,
+          animationDuration: 500,
+        });
+      }
     } catch (error) {
       Alert.alert('Error', 'Unable to recenter on your location.');
     }
@@ -117,7 +115,7 @@ export const SelectLocationScreen = () => {
     });
   };
 
-  if (loading || !region || !selectedLocation) {
+  if (loading || !cameraCenter || !selectedLocation) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#2563EB" />
@@ -128,14 +126,32 @@ export const SelectLocationScreen = () => {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
+      <Mapbox.MapView
         style={styles.map}
-        region={region}
-        onRegionChangeComplete={handleRegionChangeComplete}
-        showsUserLocation
-        showsMyLocationButton={false}
-      />
+        styleURL={Mapbox.StyleURL.Street}
+        onRegionDidChange={(feature) => {
+          // When map region changes, update camera center
+          // The center marker shows the selected location
+          if (cameraCenter) {
+            // Update based on current center (this will be synced with Camera)
+            const [longitude, latitude] = cameraCenter;
+            setSelectedLocation({ latitude, longitude });
+          }
+        }}
+      >
+        <Mapbox.Camera
+          ref={cameraRef}
+          centerCoordinate={cameraCenter}
+          zoomLevel={zoomLevel}
+          animationMode="flyTo"
+          animationDuration={0}
+        />
+
+        <Mapbox.UserLocation
+          visible={true}
+          animated={true}
+        />
+      </Mapbox.MapView>
 
       <View pointerEvents="none" style={styles.markerFixed}>
         <MaterialCommunityIcons name="map-marker" size={36} color="#EF4444" />

@@ -1,4 +1,6 @@
-module.exports = {
+const withMapboxGradle = require('./plugins/with-mapbox-gradle');
+
+module.exports = withMapboxGradle({
   expo: {
     name: 'Toiletree',
     slug: 'toiletree',
@@ -23,9 +25,6 @@ module.exports = {
         NSPhotoLibraryUsageDescription:
           'Toiletree needs photo library access to upload photos of toilet facilities.',
       },
-      config: {
-        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
-      },
     },
     android: {
       package: 'com.toiletree.app',
@@ -42,11 +41,6 @@ module.exports = {
         'READ_EXTERNAL_STORAGE',
         'WRITE_EXTERNAL_STORAGE',
       ],
-      config: {
-        googleMaps: {
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
-        },
-      },
     },
     web: {
       favicon: './assets/favicon.png',
@@ -68,15 +62,21 @@ module.exports = {
             'Allow Toiletree to access your camera to take photos of toilets.',
         },
       ],
+      [
+        '@rnmapbox/maps',
+        {
+          RNMapboxMapsDownloadToken: process.env.MAPBOX_PUBLIC_ACCESS_TOKEN || process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoibWFoaW40MDM0OTQiLCJhIjoiY21oOHVmcGdkMTI5MzJrcGNuYnoxaHBsMyJ9.3sa5Hc68pdOuycQMJIieqg',
+        },
+      ],
     ],
     extra: {
       EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
       EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+      MAPBOX_PUBLIC_ACCESS_TOKEN: process.env.MAPBOX_PUBLIC_ACCESS_TOKEN || process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoibWFoaW40MDM0OTQiLCJhIjoiY21oOHVmcGdkMTI5MzJrcGNuYnoxaHBsMyJ9.3sa5Hc68pdOuycQMJIieqg',
       eas: {
         projectId: 'd9ee245e-3e2d-4184-99c8-6df1a464be2d',
       },
     },
   },
-};
+});
 

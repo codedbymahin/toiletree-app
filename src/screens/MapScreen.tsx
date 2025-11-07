@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Alert, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
+import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,16 +14,11 @@ export const MapScreen = () => {
   const [toilets, setToilets] = useState<Toilet[]>([]);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
-  const [region, setRegion] = useState<Region>({
-    latitude: 37.78825,
-    longitude: -122.4324,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
+  const [camera, setCamera] = useState<Mapbox.Camera | null>(null);
+  const cameraRef = React.useRef<Mapbox.Camera>(null);
 
   useEffect(() => {
     requestLocationPermission();
-    loadToilets();
   }, []);
 
   const requestLocationPermission = async () => {
@@ -41,12 +36,20 @@ export const MapScreen = () => {
 
       const location = await Location.getCurrentPositionAsync({});
       setUserLocation(location);
-      setRegion({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      });
+      
+      // Load nearby toilets using the new method
+      await loadNearbyToilets(
+        location.coords.latitude,
+        location.coords.longitude
+      );
+
+      // Set initial camera position
+      const initialCamera: Mapbox.Camera = {
+        centerCoordinate: [location.coords.longitude, location.coords.latitude],
+        zoomLevel: 13,
+        animationDuration: 0,
+      };
+      setCamera(initialCamera);
       setLoading(false);
     } catch (error) {
       console.error('Error getting location:', error);
@@ -55,13 +58,14 @@ export const MapScreen = () => {
     }
   };
 
-  const loadToilets = async () => {
-    const { toilets: fetchedToilets, error } = await toiletsService.getToilets();
+  const loadNearbyToilets = async (lat: number, lon: number) => {
+    const { toilets: fetchedToilets, error } = await toiletsService.getNearbyToilets(lat, lon, 10);
     
     if (error) {
       Alert.alert('Error', 'Failed to load toilets');
     } else {
-      setToilets(fetchedToilets);
+      // Remove distance property for display (it's only used for sorting)
+      setToilets(fetchedToilets.map(({ distance, ...toilet }) => toilet));
     }
   };
 
@@ -73,47 +77,52 @@ export const MapScreen = () => {
   };
 
   const recenterMap = () => {
-    if (userLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: userLocation.coords.latitude,
-        longitude: userLocation.coords.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      }, 1000);
+    if (userLocation && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [
+          userLocation.coords.longitude,
+          userLocation.coords.latitude,
+        ],
+        zoomLevel: 13,
+        animationDuration: 1000,
+      });
     }
   };
 
-  const mapRef = React.useRef<MapView>(null);
-
-  if (loading) {
+  if (loading || !camera) {
     return <LoadingSpinner message="Loading map..." />;
   }
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
+      <Mapbox.MapView
         style={styles.map}
-        region={region}
-        onRegionChangeComplete={setRegion}
-        showsUserLocation={true}
-        showsMyLocationButton={false}
+        styleURL={Mapbox.StyleURL.Street}
       >
+        <Mapbox.Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: camera.centerCoordinate,
+            zoomLevel: camera.zoomLevel,
+          }}
+        />
+
+        <Mapbox.UserLocation
+          visible={true}
+          animated={true}
+        />
+
         {toilets.map((toilet) => (
-          <Marker
+          <Mapbox.PointAnnotation
             key={toilet.id}
-            coordinate={{
-              latitude: toilet.latitude,
-              longitude: toilet.longitude,
-            }}
-            title={toilet.name}
-            description={toilet.address}
-            onPress={() => handleMarkerPress(toilet)}
+            id={toilet.id}
+            coordinate={[toilet.longitude, toilet.latitude]}
+            onSelected={() => handleMarkerPress(toilet)}
           >
             <MaterialCommunityIcons name="map-marker" size={30} color="#2563EB" />
-          </Marker>
+          </Mapbox.PointAnnotation>
         ))}
-      </MapView>
+      </Mapbox.MapView>
 
       {/* Recenter Button */}
       <TouchableOpacity
