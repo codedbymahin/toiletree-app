@@ -6,36 +6,88 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  Alert,
   RefreshControl,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { Nunito_400Regular, Nunito_500Medium } from '@expo-google-fonts/nunito';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Toilet } from '../types';
 import { toiletsService } from '../services/toilets';
 import { LoadingSpinner, StarRating } from '../components';
 import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
+import { showErrorToast } from '../utils/toast';
 
 type ToiletListNavigationProp = StackNavigationProp<RootStackParamList, 'ToiletList'>;
+type ToiletListRouteProp = RouteProp<RootStackParamList, 'ToiletList'>;
 
 export const ToiletListScreen = () => {
   const navigation = useNavigation<ToiletListNavigationProp>();
+  const route = useRoute<ToiletListRouteProp>();
   const { user } = useAuth();
   const [toilets, setToilets] = useState<Toilet[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentBounds, setCurrentBounds] = useState<{
+    minLat: number;
+    maxLat: number;
+    minLng: number;
+    maxLng: number;
+  } | null>(null);
+
+  // Load custom fonts
+  const [fontsLoaded] = useFonts({
+    Poppins_700Bold,
+    Nunito_400Regular,
+    Nunito_500Medium,
+  });
 
   useEffect(() => {
-    loadToilets();
-  }, []);
+    // Check if toilets were passed via route params (from MapScreen)
+    const routeToilets = route.params?.toilets;
+    const routeBounds = route.params?.bounds;
+    
+    if (routeToilets !== undefined) {
+      // Use toilets from map view (visible area) - even if empty array
+      setToilets(routeToilets);
+      // Store bounds for refresh functionality
+      if (routeBounds) {
+        setCurrentBounds(routeBounds);
+      }
+      setLoading(false);
+    } else {
+      // Fallback: load all toilets if not passed from map
+      loadToilets();
+    }
+  }, [route.params?.toilets, route.params?.bounds]);
 
   const loadToilets = async () => {
     const { toilets: fetchedToilets, error } = await toiletsService.getToilets();
     
     if (error) {
-      Alert.alert('Error', 'Failed to load toilets');
+      showErrorToast('Error', 'Failed to load toilets');
+    } else {
+      setToilets(fetchedToilets);
+    }
+    setLoading(false);
+  };
+
+  /**
+   * Load toilets within bounds (for refresh when synced with map)
+   */
+  const loadToiletsInBounds = async (bounds: {
+    minLat: number;
+    maxLat: number;
+    minLng: number;
+    maxLng: number;
+  }) => {
+    const { toilets: fetchedToilets, error } = await toiletsService.getToiletsInBounds(bounds);
+    
+    if (error) {
+      showErrorToast('Error', 'Failed to load toilets');
     } else {
       setToilets(fetchedToilets);
     }
@@ -44,7 +96,16 @@ export const ToiletListScreen = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadToilets();
+    
+    // If we have bounds from the map view, use them to refresh
+    // This keeps the list synchronized with the map's visible area
+    if (currentBounds) {
+      await loadToiletsInBounds(currentBounds);
+    } else {
+      // Fallback: load all toilets if no bounds available
+      await loadToilets();
+    }
+    
     setRefreshing(false);
   };
 
@@ -59,7 +120,7 @@ export const ToiletListScreen = () => {
     <TouchableOpacity
       style={styles.card}
       onPress={() => handleToiletPress(item)}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
       {item.photo_url ? (
         <Image
@@ -69,7 +130,11 @@ export const ToiletListScreen = () => {
         />
       ) : (
         <View style={styles.placeholderImage}>
-          <MaterialCommunityIcons name="toilet" size={64} color="#9CA3AF" />
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logoPlaceholder}
+            resizeMode="contain"
+          />
         </View>
       )}
 
@@ -110,12 +175,17 @@ export const ToiletListScreen = () => {
     </TouchableOpacity>
   );
 
-  if (loading) {
+  if (!fontsLoaded || loading) {
     return <LoadingSpinner message="Loading toilets..." />;
   }
 
   return (
-    <View style={styles.container}>
+    <LinearGradient
+      colors={['#EAF4F4', '#FFFFFF']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.container}
+    >
       {/* Header with Back Button */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -133,9 +203,7 @@ export const ToiletListScreen = () => {
           <MaterialCommunityIcons name="map" size={20} color="#2563EB" style={{ marginRight: 8 }} />
           <Text style={styles.backText}>Back to Map</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {toilets.length} Toilet{toilets.length !== 1 ? 's' : ''} Found
-        </Text>
+        <Text style={styles.headerTitle}>Toilets Nearby</Text>
       </View>
 
       {/* Toilet List */}
@@ -157,76 +225,89 @@ export const ToiletListScreen = () => {
           </View>
         }
       />
-    </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     paddingTop: 16,
     paddingBottom: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   backText: {
     fontSize: 16,
     color: '#2563EB',
     fontWeight: '600',
+    fontFamily: 'Nunito_500Medium',
   },
   headerTitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
+    fontSize: 24,
+    color: '#1F2937',
+    fontWeight: '700',
+    fontFamily: 'Poppins_700Bold',
   },
   listContent: {
-    padding: 16,
+    padding: 20,
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 20,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   cardImage: {
     width: '100%',
     height: 180,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   placeholderImage: {
     width: '100%',
     height: 180,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#EAF4F4',
     justifyContent: 'center',
     alignItems: 'center',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  logoPlaceholder: {
+    width: 60,
+    height: 60,
+    opacity: 0.6,
   },
   cardContent: {
-    padding: 16,
+    padding: 20,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 6,
+    marginBottom: 8,
+    fontFamily: 'Nunito_500Medium',
   },
   cardAddress: {
     fontSize: 14,
     color: '#6B7280',
-    marginBottom: 12,
+    marginBottom: 14,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 20,
   },
   tagsContainer: {
     flexDirection: 'row',
@@ -260,9 +341,10 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: 11,
     fontWeight: '600',
+    fontFamily: 'Nunito_500Medium',
   },
   ratingContainer: {
-    marginTop: 4,
+    marginTop: 6,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -274,10 +356,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6B7280',
     marginBottom: 8,
+    fontFamily: 'Nunito_500Medium',
   },
   emptySubtext: {
     fontSize: 14,
     color: '#9CA3AF',
+    fontFamily: 'Nunito_400Regular',
   },
 });
 

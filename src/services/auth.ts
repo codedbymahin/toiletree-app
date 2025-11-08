@@ -1,12 +1,21 @@
 import { supabase } from './supabase';
 import { Profile } from '../types';
+import { sanitizeInput } from '../utils/sanitize';
 
 export const authService = {
   /**
-   * Sign up a new user with email, password, and username
+   * Sign up a new user with email, password, and full name
+   * Note: Database column should be 'full_name'. If using 'username', update the database schema.
    */
-  async signUp(email: string, password: string, username: string) {
+  async signUp(email: string, password: string, fullName: string) {
     try {
+      // Sanitize full name input (max 100 characters)
+      const sanitizedFullName = sanitizeInput(fullName, 100);
+      
+      if (!sanitizedFullName.trim()) {
+        throw new Error('Full name is required');
+      }
+
       // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
@@ -17,11 +26,15 @@ export const authService = {
       if (!authData.user) throw new Error('User creation failed');
 
       // Create profile
+      // Note: For backward compatibility, storing as 'username' in database
+      // If you want to use 'full_name' column instead, update the database schema:
+      // ALTER TABLE profiles RENAME COLUMN username TO full_name;
+      // Then change 'username' below to 'full_name'
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
           id: authData.user.id,
-          username,
+          username: sanitizedFullName, // Storing sanitized fullName in username column for now
           is_admin: false,
         });
 

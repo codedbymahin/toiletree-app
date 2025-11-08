@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,17 @@ import {
   Platform,
   ScrollView,
   TouchableOpacity,
-  Alert,
   StyleSheet,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts } from 'expo-font';
+import { Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { Nunito_400Regular, Nunito_500Medium } from '@expo-google-fonts/nunito';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, Input } from '../components';
 import { authService } from '../services/auth';
+import { showSuccessToast, showErrorToast } from '../utils/toast';
 
 interface SignupScreenProps {
   navigation: any;
@@ -27,22 +31,56 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({
     email: '',
     password: '',
     confirmPassword: '',
-    username: '',
+    fullName: '',
   });
+
+  // Load custom fonts
+  const [fontsLoaded] = useFonts({
+    Poppins_700Bold,
+    Nunito_400Regular,
+    Nunito_500Medium,
+  });
+
+  // Logo animation using react-native-reanimated
+  const logoScale = useSharedValue(0);
+  const logoOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    logoScale.value = withSpring(1, {
+      damping: 7,
+      stiffness: 50,
+    });
+    logoOpacity.value = withTiming(1, {
+      duration: 600,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const logoAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: logoScale.value }],
+      opacity: logoOpacity.value,
+    };
+  });
+
+  // Show loading state while fonts are loading
+  if (!fontsLoaded) {
+    return null;
+  }
 
   const validate = () => {
     const newErrors = {
       email: '',
       password: '',
       confirmPassword: '',
-      username: '',
+      fullName: '',
     };
     let isValid = true;
 
@@ -54,14 +92,15 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({
       isValid = false;
     }
 
-    if (!username.trim()) {
-      newErrors.username = 'Username is required';
+    if (!fullName.trim()) {
+      newErrors.fullName = 'Full Name is required';
       isValid = false;
-    } else if (username.length < 3) {
-      newErrors.username = 'Username must be at least 3 characters';
+    } else if (fullName.length < 2) {
+      newErrors.fullName = 'Full Name must be at least 2 characters';
       isValid = false;
     }
 
+    // Password validation - check length
     if (!password) {
       newErrors.password = 'Password is required';
       isValid = false;
@@ -70,6 +109,7 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({
       isValid = false;
     }
 
+    // Confirm password validation - check if passwords match
     if (!confirmPassword) {
       newErrors.confirmPassword = 'Please confirm your password';
       isValid = false;
@@ -84,24 +124,28 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({
 
   const handleSignup = async () => {
     if (!agreedToTerms) {
-      Alert.alert('Terms Required', 'Please agree to the Terms of Service and Privacy Policy to continue.');
+      showErrorToast('Terms Required', 'Please agree to the Terms of Service and Privacy Policy to continue.');
       return;
     }
 
+    // Validate before submitting
     if (!validate()) return;
 
     setLoading(true);
-    const { user, error } = await authService.signUp(email, password, username);
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Signup Failed', error);
-    } else if (user) {
-      Alert.alert(
-        'Success',
-        'Account created successfully. Please log in.',
-        [{ text: 'OK', onPress: onSignupSuccess }]
-      );
+    try {
+      const { user, error } = await authService.signUp(email, password, fullName);
+      
+      if (error) {
+        showErrorToast('Signup Failed', error);
+      } else if (user) {
+        showSuccessToast('Success', 'Account created successfully. Please log in.');
+        // Wait a moment for the toast to show, then trigger callback
+        setTimeout(() => {
+          onSignupSuccess();
+        }, 1500);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -119,7 +163,7 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({
       style={styles.container}
     >
       <LinearGradient
-        colors={['#F8F9FA', '#FFFFFF']}
+        colors={['#EAF4F4', '#FFFFFF']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.gradient}
@@ -127,107 +171,153 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
-            {/* Header Area */}
-            <View style={styles.header}>
-              <Image
-                source={require('../../assets/logo.png.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-              <Text style={styles.title}>Join the Community</Text>
-            </View>
+            {/* Premium Card Container */}
+            <View style={styles.cardContainer}>
+              {/* Header Area */}
+              <View style={styles.header}>
+                <Animated.View style={logoAnimatedStyle}>
+                  <Image
+                    source={require('../../assets/logo.png')}
+                    style={styles.logo}
+                    resizeMode="contain"
+                  />
+                </Animated.View>
+                <Text style={styles.title}>Create your account</Text>
+              </View>
 
-            {/* Signup Form */}
-            <View style={styles.form}>
-              <Input
-                label="Username"
-                value={username}
-                onChangeText={setUsername}
-                placeholder="johndoe"
-                autoCapitalize="none"
-                error={errors.username}
-                leftIcon="account-outline"
-              />
+              {/* Signup Form */}
+              <View style={styles.form}>
+                <Input
+                  label="Full Name"
+                  value={fullName}
+                  onChangeText={(text) => {
+                    setFullName(text);
+                    // Clear error when user starts typing
+                    if (errors.fullName) {
+                      setErrors({ ...errors, fullName: '' });
+                    }
+                  }}
+                  placeholder="John Doe"
+                  autoCapitalize="words"
+                  error={errors.fullName}
+                  leftIcon="account-outline"
+                />
 
-              <Input
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="your@email.com"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                error={errors.email}
-                leftIcon="email-outline"
-              />
+                <Input
+                  label="Email"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    // Clear error when user starts typing
+                    if (errors.email) {
+                      setErrors({ ...errors, email: '' });
+                    }
+                  }}
+                  placeholder="your@email.com"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  error={errors.email}
+                  leftIcon="email-outline"
+                />
 
-              <Input
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="At least 6 characters"
-                autoCapitalize="none"
-                error={errors.password}
-                leftIcon="lock-outline"
-                secureTextEntry
-                showPasswordToggle
-              />
+                <Input
+                  label="Password"
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    // Clear password error when user starts typing
+                    if (errors.password) {
+                      setErrors({ ...errors, password: '' });
+                    }
+                    // Check password length in real-time
+                    if (text.length > 0 && text.length < 6) {
+                      setErrors({ ...errors, password: 'Password must be at least 6 characters' });
+                    }
+                    // Clear confirm password error if passwords now match
+                    if (confirmPassword && text === confirmPassword && errors.confirmPassword) {
+                      setErrors({ ...errors, confirmPassword: '' });
+                    }
+                    // Set confirm password error if passwords don't match
+                    if (confirmPassword && text !== confirmPassword) {
+                      setErrors({ ...errors, confirmPassword: 'Passwords do not match' });
+                    }
+                  }}
+                  placeholder="At least 6 characters"
+                  autoCapitalize="none"
+                  error={errors.password}
+                  leftIcon="lock-outline"
+                  secureTextEntry
+                  showPasswordToggle
+                />
 
-              <Input
-                label="Confirm Password"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Confirm your password"
-                autoCapitalize="none"
-                error={errors.confirmPassword}
-                leftIcon="lock-outline"
-                secureTextEntry
-                showPasswordToggle
-              />
-            </View>
+                <Input
+                  label="Confirm Password"
+                  value={confirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    // Clear error when user starts typing
+                    if (errors.confirmPassword) {
+                      setErrors({ ...errors, confirmPassword: '' });
+                    }
+                    // Check if passwords match in real-time
+                    if (password && text !== password) {
+                      setErrors({ ...errors, confirmPassword: 'Passwords do not match' });
+                    }
+                  }}
+                  placeholder="Confirm your password"
+                  autoCapitalize="none"
+                  error={errors.confirmPassword}
+                  leftIcon="lock-outline"
+                  secureTextEntry
+                  showPasswordToggle
+                />
+              </View>
 
-            {/* Terms Agreement */}
-            <View style={styles.termsContainer}>
-              <TouchableOpacity
-                onPress={() => setAgreedToTerms(!agreedToTerms)}
-                style={styles.checkboxContainer}
-                activeOpacity={0.7}
-              >
+              {/* Terms Agreement */}
+              <View style={styles.termsContainer}>
+                <TouchableOpacity
+                  onPress={() => setAgreedToTerms(!agreedToTerms)}
+                  style={styles.checkboxContainer}
+                  activeOpacity={0.7}
+                >
                 <MaterialCommunityIcons
                   name={agreedToTerms ? 'checkbox-marked' : 'checkbox-blank-outline'}
                   size={24}
-                  color={agreedToTerms ? '#D90429' : '#9CA3AF'}
+                  color={agreedToTerms ? '#D62828' : '#9CA3AF'}
                 />
-              </TouchableOpacity>
-              <View style={styles.termsTextContainer}>
-                <Text style={styles.termsText}>I agree to the </Text>
-                <TouchableOpacity onPress={handleNavigateToTerms} activeOpacity={0.7}>
-                  <Text style={styles.termsLink}>Terms of Service</Text>
                 </TouchableOpacity>
-                <Text style={styles.termsText}> and </Text>
-                <TouchableOpacity onPress={handleNavigateToPrivacy} activeOpacity={0.7}>
-                  <Text style={styles.termsLink}>Privacy Policy</Text>
-                </TouchableOpacity>
-                <Text style={styles.termsText}>.</Text>
+                <View style={styles.termsTextContainer}>
+                  <Text style={styles.termsText}>I agree to the </Text>
+                  <TouchableOpacity onPress={handleNavigateToTerms} activeOpacity={0.7}>
+                    <Text style={styles.termsLink}>Terms of Service</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.termsText}> and </Text>
+                  <TouchableOpacity onPress={handleNavigateToPrivacy} activeOpacity={0.7}>
+                    <Text style={styles.termsLink}>Privacy Policy</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.termsText}>.</Text>
+                </View>
               </View>
-            </View>
 
-            <Button
-              title="Create Account"
-              onPress={handleSignup}
-              loading={loading}
-              disabled={!agreedToTerms}
-              className="mb-4"
-              style={{ backgroundColor: '#D90429' }}
-            />
+              <View style={styles.buttonContainer}>
+                <Button
+                  title="Create Account"
+                  onPress={handleSignup}
+                  loading={loading}
+                  disabled={!agreedToTerms || loading}
+                />
+              </View>
 
-            {/* Login Link */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.goBack()}>
-                <Text style={styles.footerLink}>Sign In</Text>
-              </TouchableOpacity>
+              {/* Login Link */}
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Already have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.goBack()}>
+                  <Text style={styles.footerLink}>Sign In</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -245,35 +335,42 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 32,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 48,
+    paddingHorizontal: 20,
+    minHeight: '100%',
+  },
+  cardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 48,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingVertical: 32,
-    paddingHorizontal: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    marginBottom: 32,
   },
   logo: {
-    width: 110,
-    height: 110,
-    marginBottom: 20,
+    width: 90,
+    height: 90,
+    marginBottom: 24,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#2B2D42',
+    color: '#1F2937',
+    textAlign: 'center',
+    lineHeight: 36,
+    fontFamily: 'Poppins_700Bold',
   },
   form: {
     marginBottom: 24,
@@ -282,6 +379,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 24,
+    paddingHorizontal: 4,
   },
   checkboxContainer: {
     marginRight: 12,
@@ -293,27 +391,38 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   termsText: {
-    color: '#2B2D42',
+    color: '#6B7280',
     fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 20,
+    fontFamily: 'Nunito_400Regular',
   },
   termsLink: {
-    color: '#D90429',
+    color: '#D62828',
     fontWeight: '600',
     fontSize: 14,
+    lineHeight: 20,
+    fontFamily: 'Nunito_500Medium',
+  },
+  buttonContainer: {
+    marginBottom: 20,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 8,
   },
   footerText: {
-    color: '#2B2D42',
+    color: '#6B7280',
     fontSize: 15,
+    fontWeight: '400',
+    fontFamily: 'Nunito_400Regular',
   },
   footerLink: {
-    color: '#D90429',
+    color: '#D62828',
     fontWeight: '600',
     fontSize: 15,
+    fontFamily: 'Nunito_500Medium',
   },
 });
 

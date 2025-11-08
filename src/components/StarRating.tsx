@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, Text } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 
 interface StarRatingProps {
   rating: number;
@@ -23,18 +23,19 @@ export const StarRating: React.FC<StarRatingProps> = ({
     for (let i = 1; i <= 5; i++) {
       const filled = i <= Math.round(rating);
       const star = filled ? '★' : '☆';
+      const starColor = filled ? '#FFC700' : '#D1D5DB'; // Gold for filled, light grey for empty
       
       if (interactive && onRatingChange) {
         stars.push(
-          <TouchableOpacity key={i} onPress={() => onRatingChange(i)}>
-            <Text style={{ fontSize: size }} className="text-yellow-500">
+          <TouchableOpacity key={i} onPress={() => onRatingChange(i)} activeOpacity={0.7}>
+            <Text style={{ fontSize: size, color: starColor }}>
               {star}
             </Text>
           </TouchableOpacity>
         );
       } else {
         stars.push(
-          <Text key={i} style={{ fontSize: size }} className="text-yellow-500">
+          <Text key={i} style={{ fontSize: size, color: starColor }}>
             {star}
           </Text>
         );
@@ -44,14 +45,25 @@ export const StarRating: React.FC<StarRatingProps> = ({
   };
 
   return (
-    <View className={`flex-row items-center ${className}`}>
+    <View style={styles.container}>
       {renderStars()}
       {showNumber && (
-        <Text className="ml-2 text-gray-600">
+        <Text style={[styles.ratingText, { fontSize: size * 0.7 }]}>
           {rating.toFixed(1)}
         </Text>
       )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
+    marginLeft: 8,
+    color: '#6B7280',
+  },
+});
 

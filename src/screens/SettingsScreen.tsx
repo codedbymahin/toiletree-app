@@ -1,50 +1,34 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { RootStackParamList } from '../navigation/types';
 import { authService } from '../services/auth';
 import { useAuth } from '../context/AuthContext';
+import { showSuccessToast, showErrorToast } from '../utils/toast';
+import { ConfirmationModal } from '../components';
 
 type SettingsNavigationProp = StackNavigationProp<RootStackParamList, 'Settings'>;
 
 export const SettingsScreen = () => {
   const navigation = useNavigation<SettingsNavigationProp>();
   const { signOut } = useAuth();
+  const [isDeleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
 
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'Are you sure you want to request account deletion? Your account and data will be permanently deleted within 24 hours.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: async () => {
-            const { success, error } = await authService.requestAccountDeletion();
-            
-            if (error) {
-              Alert.alert('Error', error);
-            } else {
-              Alert.alert(
-                'Deletion Request Submitted',
-                'Your deletion request has been submitted.',
-                [
-                  {
-                    text: 'OK',
-                    onPress: async () => {
-                      await signOut();
-                    },
-                  },
-                ]
-              );
-            }
-          },
-        },
-      ]
-    );
+  const handleDeleteAccount = async () => {
+    setDeleteAccountModalVisible(false);
+    const { success, error } = await authService.requestAccountDeletion();
+    
+    if (error) {
+      showErrorToast('Error', error);
+    } else {
+      showSuccessToast('Deletion Request Submitted', 'Your deletion request has been submitted.');
+      // Wait a moment for toast, then sign out
+      setTimeout(async () => {
+        await signOut();
+      }, 2000);
+    }
   };
 
   const handleSendFeedback = async () => {
@@ -55,13 +39,13 @@ export const SettingsScreen = () => {
       if (canOpen) {
         await Linking.openURL(mailtoUrl);
       } else {
-        Alert.alert(
+        showErrorToast(
           'Error',
           'Unable to open email client. Please send feedback to itsmemahin.bd@outlook.com'
         );
       }
     } catch (error) {
-      Alert.alert(
+      showErrorToast(
         'Error',
         'Unable to open email client. Please send feedback to itsmemahin.bd@outlook.com'
       );
@@ -74,6 +58,12 @@ export const SettingsScreen = () => {
       title: 'About Toiletree',
       iconName: 'information-outline' as const,
       screen: 'About' as keyof RootStackParamList,
+    },
+    {
+      id: 'team',
+      title: 'Meet the Team',
+      iconName: 'account-group-outline' as const,
+      screen: 'Team' as keyof RootStackParamList,
     },
     {
       id: 'privacy',
@@ -125,13 +115,24 @@ export const SettingsScreen = () => {
         {/* Delete Account Button */}
         <TouchableOpacity
           style={styles.deleteButton}
-          onPress={handleDeleteAccount}
+          onPress={() => setDeleteAccountModalVisible(true)}
           activeOpacity={0.7}
         >
           <MaterialCommunityIcons name="delete-forever-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.deleteText}>Delete Account</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Delete Account Confirmation Modal */}
+      <ConfirmationModal
+        isVisible={isDeleteAccountModalVisible}
+        title="Delete Account"
+        description="Are you sure you want to request account deletion? Your account and data will be permanently deleted within 24 hours."
+        confirmText="Delete Account"
+        cancelText="Cancel"
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setDeleteAccountModalVisible(false)}
+      />
     </ScrollView>
   );
 };

@@ -26,11 +26,20 @@ export type RootStackParamList = {
   Auth: undefined;
   ToiletDetails: { toiletId: string; toilet?: Toilet };
   ReportIssue: { toiletId: string; toiletName: string };
-  ToiletList: undefined;
+  ToiletList: {
+    toilets?: Toilet[];
+    bounds?: {
+      minLat: number;
+      maxLat: number;
+      minLng: number;
+      maxLng: number;
+    };
+  };
   Settings: undefined;
   About: undefined;
   PrivacyPolicy: undefined;
   Terms: undefined;
+  Team: undefined;
 };
 
 export type SubmitStackParamList = {

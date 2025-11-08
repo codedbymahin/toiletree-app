@@ -4,13 +4,19 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
-  Alert,
   RefreshControl,
+  StyleSheet,
 } from 'react-native';
-import { ToiletSubmission, Report } from '../types';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { Nunito_400Regular, Nunito_500Medium } from '@expo-google-fonts/nunito';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { ToiletSubmission, Report, Toilet } from '../types';
 import { adminService } from '../services/admin';
-import { LoadingSpinner, Button } from '../components';
+import { LoadingSpinner, ConfirmationModal, SegmentedControl, ToiletCard } from '../components';
+import { showSuccessToast, showErrorToast } from '../utils/toast';
+import { useNavigation } from '@react-navigation/native';
 
 export const AdminDashboardScreen = () => {
   const [activeTab, setActiveTab] = useState<'submissions' | 'reports' | 'deletions'>('submissions');
@@ -24,6 +30,15 @@ export const AdminDashboardScreen = () => {
   }>>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [approveModalVisible, setApproveModalVisible] = useState(false);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
+  const [fontsLoaded] = useFonts({
+    Poppins_700Bold,
+    Nunito_400Regular,
+    Nunito_500Medium,
+  });
+  const navigation = useNavigation();
 
   useEffect(() => {
     loadData();
@@ -44,7 +59,7 @@ export const AdminDashboardScreen = () => {
     const { submissions: data, error } = await adminService.getPendingSubmissions();
     
     if (error) {
-      Alert.alert('Error', 'Failed to load submissions');
+      showErrorToast('Error', 'Failed to load submissions');
     } else {
       setSubmissions(data);
     }
@@ -54,7 +69,7 @@ export const AdminDashboardScreen = () => {
     const { reports: data, error } = await adminService.getReports();
     
     if (error) {
-      Alert.alert('Error', 'Failed to load reports');
+      showErrorToast('Error', 'Failed to load reports');
     } else {
       setReports(data);
     }
@@ -64,7 +79,7 @@ export const AdminDashboardScreen = () => {
     const { requests, error } = await adminService.getDeletionRequests();
     
     if (error) {
-      Alert.alert('Error', 'Failed to load deletion requests');
+      showErrorToast('Error', 'Failed to load deletion requests');
     } else {
       setDeletionRequests(requests);
     }
@@ -76,65 +91,58 @@ export const AdminDashboardScreen = () => {
     setRefreshing(false);
   };
 
-  const handleApproveSubmission = async (submissionId: string) => {
-    Alert.alert(
-      'Approve Submission',
-      'Are you sure you want to approve this toilet submission?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Approve',
-          onPress: async () => {
-            const { success, error } = await adminService.approveSubmission(submissionId);
-            
-            if (error) {
-              Alert.alert('Error', error);
-            } else {
-              Alert.alert('Success', 'Submission approved!');
-              loadSubmissions();
-            }
-          },
-        },
-      ]
-    );
+  const handleApproveSubmissionClick = (submissionId: string) => {
+    setSelectedSubmissionId(submissionId);
+    setApproveModalVisible(true);
   };
 
-  const handleRejectSubmission = async (submissionId: string) => {
-    // For now, reject without notes since Alert.prompt is iOS-only
-    // TODO: Implement cross-platform modal for admin notes
-    Alert.alert(
-      'Reject Submission',
-      'Are you sure you want to reject this submission?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async () => {
-            const { success, error } = await adminService.rejectSubmission(
-              submissionId,
-              'Rejected by admin'
-            );
-            
-            if (error) {
-              Alert.alert('Error', error);
-            } else {
-              Alert.alert('Success', 'Submission rejected');
-              loadSubmissions();
-            }
-          },
-        },
-      ]
+  const handleApproveSubmission = async () => {
+    if (!selectedSubmissionId) return;
+    
+    setApproveModalVisible(false);
+    const { success, error } = await adminService.approveSubmission(selectedSubmissionId);
+    
+    if (error) {
+      showErrorToast('Error', error);
+    } else {
+      showSuccessToast('Success', 'Submission approved!');
+      loadSubmissions();
+    }
+    
+    setSelectedSubmissionId(null);
+  };
+
+  const handleRejectSubmissionClick = (submissionId: string) => {
+    setSelectedSubmissionId(submissionId);
+    setRejectModalVisible(true);
+  };
+
+  const handleRejectSubmission = async () => {
+    if (!selectedSubmissionId) return;
+    
+    setRejectModalVisible(false);
+    const { success, error } = await adminService.rejectSubmission(
+      selectedSubmissionId,
+      'Rejected by admin'
     );
+    
+    if (error) {
+      showErrorToast('Error', error);
+    } else {
+      showSuccessToast('Success', 'Submission rejected');
+      loadSubmissions();
+    }
+    
+    setSelectedSubmissionId(null);
   };
 
   const handleResolveReport = async (reportId: string) => {
     const { success, error } = await adminService.updateReportStatus(reportId, 'resolved');
     
     if (error) {
-      Alert.alert('Error', error);
+      showErrorToast('Error', error);
     } else {
-      Alert.alert('Success', 'Report marked as resolved');
+      showSuccessToast('Success', 'Report marked as resolved');
       loadReports();
     }
   };
@@ -143,236 +151,235 @@ export const AdminDashboardScreen = () => {
     const { success, error } = await adminService.updateReportStatus(reportId, 'dismissed');
     
     if (error) {
-      Alert.alert('Error', error);
+      showErrorToast('Error', error);
     } else {
-      Alert.alert('Success', 'Report dismissed');
+      showSuccessToast('Success', 'Report dismissed');
       loadReports();
     }
   };
 
-  if (loading) {
+  // Convert submission to Toilet format for ToiletCard
+  const submissionToToilet = (submission: ToiletSubmission): Toilet => {
+    return {
+      id: submission.id,
+      name: submission.name,
+      address: submission.address,
+      latitude: submission.latitude,
+      longitude: submission.longitude,
+      photo_url: submission.photo_url,
+      status: 'active',
+      created_by: submission.submitted_by,
+      created_at: submission.submitted_at,
+      is_female_friendly: submission.is_female_friendly,
+      has_water_access: submission.has_water_access,
+      is_paid: submission.is_paid,
+    };
+  };
+
+  if (loading || !fontsLoaded) {
     return <LoadingSpinner message="Loading..." />;
   }
 
   return (
-    <View className="flex-1 bg-white">
-      {/* Tabs */}
-      <View className="flex-row border-b border-gray-200">
-        <TouchableOpacity
-          onPress={() => setActiveTab('submissions')}
-          className={`flex-1 py-4 ${
-            activeTab === 'submissions' ? 'border-b-2 border-blue-600' : ''
-          }`}
-        >
-          <Text
-            className={`text-center font-semibold ${
-              activeTab === 'submissions' ? 'text-blue-600' : 'text-gray-600'
-            }`}
-          >
-            Submissions ({submissions.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setActiveTab('reports')}
-          className={`flex-1 py-4 ${
-            activeTab === 'reports' ? 'border-b-2 border-blue-600' : ''
-          }`}
-        >
-          <Text
-            className={`text-center font-semibold ${
-              activeTab === 'reports' ? 'text-blue-600' : 'text-gray-600'
-            }`}
-          >
-            Reports ({reports.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setActiveTab('deletions')}
-          className={`flex-1 py-4 ${
-            activeTab === 'deletions' ? 'border-b-2 border-blue-600' : ''
-          }`}
-        >
-          <Text
-            className={`text-center font-semibold ${
-              activeTab === 'deletions' ? 'text-blue-600' : 'text-gray-600'
-            }`}
-          >
-            Deletions ({deletionRequests.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={['#EAF4F4', '#FFFFFF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.gradientHeader}
+      >
+        <SafeAreaView edges={['top']} style={styles.safeArea}>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Admin Dashboard</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      {/* Segmented Control */}
+      <SegmentedControl
+        options={[
+          { label: 'Submissions', value: 'submissions', count: submissions.length },
+          { label: 'Reports', value: 'reports', count: reports.length },
+          { label: 'Deletions', value: 'deletions', count: deletionRequests.length },
+        ]}
+        selectedValue={activeTab}
+        onValueChange={(value) => setActiveTab(value as any)}
+      />
 
       {/* Content */}
       <ScrollView
-        className="flex-1"
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
         {activeTab === 'submissions' ? (
           // Submissions List
-          <View className="p-4">
+          <View style={styles.contentContainer}>
             {submissions.length > 0 ? (
-              submissions.map((submission: any) => (
-                <View
-                  key={submission.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4 mb-4"
-                >
-                  {submission.photo_url && (
-                    <Image
-                      source={{ uri: submission.photo_url }}
-                      className="w-full h-40 rounded-lg mb-3"
-                      resizeMode="cover"
+              submissions.map((submission) => {
+                const toilet = submissionToToilet(submission);
+                return (
+                  <View key={submission.id} style={styles.submissionCardWrapper}>
+                    <ToiletCard
+                      toilet={toilet}
+                      onPress={() => {
+                        // Could navigate to submission details if needed
+                      }}
                     />
-                  )}
-                  <Text className="text-lg font-bold text-gray-800 mb-1">
-                    {submission.name}
-                  </Text>
-                  <Text className="text-gray-600 text-sm mb-2">
-                    {submission.address}
-                  </Text>
-                  <View className="flex-row flex-wrap mb-3">
-                    {submission.is_female_friendly && (
-                      <View className="flex-row items-center bg-pink-100 px-2 py-1 rounded-full mr-2 mb-2">
-                        <Text className="text-pink-700 mr-1">♀️</Text>
-                        <Text className="text-pink-700 text-xs font-semibold">Female Friendly</Text>
-                      </View>
-                    )}
-                    {submission.has_water_access && (
-                      <View className="flex-row items-center bg-blue-100 px-2 py-1 rounded-full mr-2 mb-2">
-                        <Text className="text-blue-700 mr-1">💧</Text>
-                        <Text className="text-blue-700 text-xs font-semibold">Water</Text>
-                      </View>
-                    )}
-                    {submission.is_paid && (
-                      <View className="flex-row items-center bg-yellow-100 px-2 py-1 rounded-full mr-2 mb-2">
-                        <Text className="text-yellow-700 mr-1">💰</Text>
-                        <Text className="text-yellow-700 text-xs font-semibold">Paid</Text>
-                      </View>
-                    )}
+                    <View style={styles.submissionMeta}>
+                      <Text style={styles.submissionMetaText}>
+                        Submitted by: {(submission as any).profiles?.username || 'Unknown'}
+                      </Text>
+                    </View>
+                    <View style={styles.actionButtons}>
+                      <TouchableOpacity
+                        style={styles.approveButton}
+                        onPress={() => handleApproveSubmissionClick(submission.id)}
+                        activeOpacity={0.8}
+                      >
+                        <MaterialCommunityIcons name="check" size={20} color="#FFFFFF" />
+                        <Text style={styles.approveButtonText}>Approve</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.rejectButton}
+                        onPress={() => handleRejectSubmissionClick(submission.id)}
+                        activeOpacity={0.8}
+                      >
+                        <MaterialCommunityIcons name="close" size={20} color="#D62828" />
+                        <Text style={styles.rejectButtonText}>Reject</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <Text className="text-gray-500 text-xs mb-3">
-                    Submitted by: {submission.profiles?.username || 'Unknown'}
-                  </Text>
-                  <View className="flex-row">
-                    <Button
-                      title="Approve"
-                      onPress={() => handleApproveSubmission(submission.id)}
-                      className="flex-1 mr-2"
-                    />
-                    <Button
-                      title="Reject"
-                      onPress={() => handleRejectSubmission(submission.id)}
-                      variant="danger"
-                      className="flex-1 ml-2"
-                    />
-                  </View>
-                </View>
-              ))
+                );
+              })
             ) : (
-              <Text className="text-gray-500 text-center py-8">
-                No pending submissions
-              </Text>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No pending submissions</Text>
+              </View>
             )}
           </View>
         ) : activeTab === 'reports' ? (
           // Reports List
-          <View className="p-4">
+          <View style={styles.contentContainer}>
             {reports.length > 0 ? (
-              reports.map((report: any) => (
-                <View
-                  key={report.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4 mb-4"
-                >
-                  <View className="flex-row justify-between items-start mb-2">
-                    <Text className="text-lg font-bold text-gray-800 flex-1">
+              reports.map((report) => (
+                <View key={report.id} style={styles.reportCard}>
+                  <View style={styles.reportHeader}>
+                    <Text style={styles.reportTitle}>
                       {report.toilets?.name || 'Unknown Toilet'}
                     </Text>
-                    <View className="bg-red-100 px-2 py-1 rounded">
-                      <Text className="text-red-600 text-xs font-semibold">
+                    <View style={styles.issueTypeBadge}>
+                      <Text style={styles.issueTypeText}>
                         {report.issue_type.toUpperCase()}
                       </Text>
                     </View>
                   </View>
-                  <Text className="text-gray-600 text-sm mb-2">
+                  <Text style={styles.reportDescription}>
                     {report.description}
                   </Text>
-                  <Text className="text-gray-500 text-xs mb-3">
+                  <Text style={styles.reportMeta}>
                     Reported by: {report.profiles?.username || 'Unknown'}
                   </Text>
-                  <View className="flex-row">
-                    <Button
-                      title="Resolve"
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      style={styles.approveButton}
                       onPress={() => handleResolveReport(report.id)}
-                      className="flex-1 mr-2"
-                    />
-                    <Button
-                      title="Dismiss"
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons name="check" size={20} color="#FFFFFF" />
+                      <Text style={styles.approveButtonText}>Resolve</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.rejectButton}
                       onPress={() => handleDismissReport(report.id)}
-                      variant="secondary"
-                      className="flex-1 ml-2"
-                    />
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons name="close" size={20} color="#D62828" />
+                      <Text style={styles.rejectButtonText}>Dismiss</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))
             ) : (
-              <Text className="text-gray-500 text-center py-8">
-                No open reports
-              </Text>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No open reports</Text>
+              </View>
             )}
           </View>
         ) : (
           // Deletion Requests List
-          <View className="p-4">
+          <View style={styles.contentContainer}>
             {deletionRequests.length > 0 ? (
               deletionRequests.map((request) => {
                 const requestDate = new Date(request.deletion_requested_at);
                 const timeAgo = getTimeAgo(requestDate);
                 
                 return (
-                  <View
-                    key={request.id}
-                    className="bg-white border border-red-200 rounded-lg p-4 mb-4"
-                  >
-                    <View className="flex-row items-start justify-between mb-2">
-                      <View className="flex-1">
-                        <Text className="text-lg font-bold text-gray-800 mb-1">
-                          {request.username}
-                        </Text>
-                        {request.email ? (
-                          <Text className="text-gray-600 text-sm mb-1">
-                            {request.email}
-                          </Text>
-                        ) : null}
-                        <Text className="text-gray-500 text-xs">
+                  <View key={request.id} style={styles.deletionCard}>
+                    <View style={styles.deletionHeader}>
+                      <View style={styles.deletionInfo}>
+                        <Text style={styles.deletionTitle}>{request.username}</Text>
+                        {request.email && (
+                          <Text style={styles.deletionEmail}>{request.email}</Text>
+                        )}
+                        <Text style={styles.deletionId}>
                           User ID: {request.id.substring(0, 8)}...
                         </Text>
                       </View>
-                      <View className="bg-red-100 px-2 py-1 rounded">
-                        <Text className="text-red-600 text-xs font-semibold">
-                          PENDING
-                        </Text>
+                      <View style={styles.pendingBadge}>
+                        <Text style={styles.pendingBadgeText}>PENDING</Text>
                       </View>
                     </View>
-                    <View className="mt-3 pt-3 border-t border-gray-200">
-                      <Text className="text-gray-600 text-sm mb-1">
-                        <Text className="font-semibold">Requested:</Text> {requestDate.toLocaleString()}
+                    <View style={styles.deletionMeta}>
+                      <Text style={styles.deletionMetaText}>
+                        <Text style={styles.deletionMetaLabel}>Requested:</Text>{' '}
+                        {requestDate.toLocaleString()}
                       </Text>
-                      <Text className="text-gray-500 text-xs">
-                        {timeAgo}
-                      </Text>
+                      <Text style={styles.deletionTimeAgo}>{timeAgo}</Text>
                     </View>
                   </View>
                 );
               })
             ) : (
-              <Text className="text-gray-500 text-center py-8">
-                No deletion requests
-              </Text>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No deletion requests</Text>
+              </View>
             )}
           </View>
         )}
       </ScrollView>
+
+      {/* Approve Submission Confirmation Modal */}
+      <ConfirmationModal
+        isVisible={approveModalVisible}
+        title="Approve Submission"
+        description="Are you sure you want to approve this toilet submission?"
+        confirmText="Approve"
+        cancelText="Cancel"
+        onConfirm={handleApproveSubmission}
+        onCancel={() => {
+          setApproveModalVisible(false);
+          setSelectedSubmissionId(null);
+        }}
+        confirmButtonColor="#2ECC71"
+      />
+
+      {/* Reject Submission Confirmation Modal */}
+      <ConfirmationModal
+        isVisible={rejectModalVisible}
+        title="Reject Submission"
+        description="Are you sure you want to reject this submission?"
+        confirmText="Reject"
+        cancelText="Cancel"
+        onConfirm={handleRejectSubmission}
+        onCancel={() => {
+          setRejectModalVisible(false);
+          setSelectedSubmissionId(null);
+        }}
+      />
     </View>
   );
 };
@@ -393,3 +400,227 @@ const getTimeAgo = (date: Date): string => {
   }
 };
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+  },
+  gradientHeader: {
+    paddingBottom: 16,
+  },
+  safeArea: {
+    paddingTop: 8,
+  },
+  headerContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1F2937',
+    fontFamily: 'Poppins_700Bold',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  contentContainer: {
+    padding: 16,
+  },
+  submissionCardWrapper: {
+    marginBottom: 20,
+  },
+  submissionMeta: {
+    paddingHorizontal: 4,
+    paddingBottom: 12,
+  },
+  submissionMetaText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: 'Nunito_400Regular',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  approveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#2ECC71',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#2ECC71',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  approveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: 'Nunito_500Medium',
+  },
+  rejectButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 2,
+    borderColor: '#D62828',
+  },
+  rejectButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#D62828',
+    fontFamily: 'Nunito_500Medium',
+  },
+  reportCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  reportHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  reportTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    fontFamily: 'Poppins_700Bold',
+    marginRight: 12,
+  },
+  issueTypeBadge: {
+    backgroundColor: '#FDE8E8',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D62828',
+  },
+  issueTypeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#D62828',
+    fontFamily: 'Nunito_500Medium',
+  },
+  reportDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+    marginBottom: 12,
+    fontFamily: 'Nunito_400Regular',
+  },
+  reportMeta: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 16,
+    fontFamily: 'Nunito_400Regular',
+  },
+  deletionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FDE8E8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  deletionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  deletionInfo: {
+    flex: 1,
+  },
+  deletionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+    fontFamily: 'Poppins_700Bold',
+  },
+  deletionEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+    fontFamily: 'Nunito_400Regular',
+  },
+  deletionId: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontFamily: 'Nunito_400Regular',
+  },
+  pendingBadge: {
+    backgroundColor: '#FDE8E8',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D62828',
+  },
+  pendingBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#D62828',
+    fontFamily: 'Nunito_500Medium',
+  },
+  deletionMeta: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  deletionMetaText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+    fontFamily: 'Nunito_400Regular',
+  },
+  deletionMetaLabel: {
+    fontWeight: '600',
+    fontFamily: 'Nunito_500Medium',
+  },
+  deletionTimeAgo: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontFamily: 'Nunito_400Regular',
+  },
+  emptyState: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    fontFamily: 'Nunito_400Regular',
+  },
+});

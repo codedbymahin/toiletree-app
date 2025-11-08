@@ -1,11 +1,11 @@
 import React from 'react';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { NavigationContainer, useNavigation, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { LoadingSpinner } from '../components';
+import { LoadingSpinner, CustomTabBar } from '../components';
 import { LoginScreen } from '../screens/LoginScreen';
 import { SignupScreen } from '../screens/SignupScreen';
 import { MapScreen } from '../screens/MapScreen';
@@ -26,6 +26,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { AboutScreen } from '../screens/AboutScreen';
 import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
 import { TermsScreen } from '../screens/TermsScreen';
+import { TeamScreen } from '../screens/TeamScreen';
 import { LoginWallScreen } from '../screens/LoginWallScreen';
 import { RedirectToAuthScreen } from '../screens/RedirectToAuthScreen';
 import { GuestTabParamList } from './types';
@@ -109,7 +110,9 @@ const GuestTabNavigator = () => {
         headerShown: true,
         tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: '#6B7280',
+        tabBarStyle: { display: 'none' }, // Hide default tab bar
       }}
+      tabBar={(props) => <CustomTabBar {...props} />}
     >
       <GuestTab.Screen
         name="Map"
@@ -117,7 +120,7 @@ const GuestTabNavigator = () => {
         options={{
           tabBarLabel: 'Map',
           tabBarIcon: ({ color }) => <MaterialCommunityIcons name="map" size={24} color={color} />,
-          headerTitle: 'Toiletree',
+          headerShown: false,
         }}
       />
       <GuestTab.Screen
@@ -148,10 +151,36 @@ const MainTabNavigator = () => {
 
   return (
     <MainTab.Navigator
-      screenOptions={{
-        headerShown: true,
-        tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: '#6B7280',
+      screenOptions={({ route }) => {
+        // Get the nested route name from the Submit stack navigator
+        const routeName = getFocusedRouteNameFromRoute(route) ?? route.name;
+        
+        // Define screens where the tab bar should be hidden
+        const screensToHideTabBar = ['SelectLocation', 'SubmitForm'];
+        
+        // Determine if tab bar should be hidden
+        const shouldHideTabBar = screensToHideTabBar.includes(routeName);
+        
+        return {
+          headerShown: true,
+          tabBarActiveTintColor: '#2563EB',
+          tabBarInactiveTintColor: '#6B7280',
+          tabBarStyle: shouldHideTabBar ? { display: 'none' } : { display: 'flex' },
+        };
+      }}
+      tabBar={(props) => {
+        // Check if tab bar should be hidden based on nested route
+        const currentRoute = props.state.routes[props.state.index];
+        // getFocusedRouteNameFromRoute will return the nested route name if we're in a nested navigator
+        const routeName = getFocusedRouteNameFromRoute(currentRoute) ?? currentRoute.name;
+        const screensToHideTabBar = ['SelectLocation', 'SubmitForm'];
+        const shouldHideTabBar = screensToHideTabBar.includes(routeName);
+        
+        if (shouldHideTabBar) {
+          return null;
+        }
+        
+        return <CustomTabBar {...props} />;
       }}
     >
       <MainTab.Screen
@@ -160,7 +189,7 @@ const MainTabNavigator = () => {
         options={{
           tabBarLabel: 'Map',
           tabBarIcon: ({ color }) => <MaterialCommunityIcons name="map" size={24} color={color} />,
-          headerTitle: 'Toiletree',
+          headerShown: false,
         }}
       />
       <MainTab.Screen
@@ -247,6 +276,14 @@ const GuestNavigator = () => {
         }}
       />
       <RootStack.Screen
+        name="Team"
+        component={TeamScreen}
+        options={{
+          headerShown: true,
+          headerTitle: 'Meet the Team',
+        }}
+      />
+      <RootStack.Screen
         name="Auth"
         component={AuthNavigator}
         options={{
@@ -322,6 +359,14 @@ const RootNavigator = () => {
         options={{
           headerShown: true,
           headerTitle: 'Terms of Service',
+        }}
+      />
+      <RootStack.Screen
+        name="Team"
+        component={TeamScreen}
+        options={{
+          headerShown: true,
+          headerTitle: 'Meet the Team',
         }}
       />
     </RootStack.Navigator>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,16 @@ import {
   Platform,
   ScrollView,
   TouchableOpacity,
-  Alert,
   StyleSheet,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts } from 'expo-font';
+import { Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { Nunito_400Regular, Nunito_500Medium } from '@expo-google-fonts/nunito';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import { Button, Input } from '../components';
 import { authService } from '../services/auth';
+import { showErrorToast } from '../utils/toast';
 
 interface LoginScreenProps {
   navigation: any;
@@ -27,6 +31,40 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
+  
+  // Load custom fonts
+  const [fontsLoaded] = useFonts({
+    Poppins_700Bold,
+    Nunito_400Regular,
+    Nunito_500Medium,
+  });
+
+  // Logo animation using react-native-reanimated
+  const logoScale = useSharedValue(0);
+  const logoOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    logoScale.value = withSpring(1, {
+      damping: 7,
+      stiffness: 50,
+    });
+    logoOpacity.value = withTiming(1, {
+      duration: 600,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const logoAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: logoScale.value }],
+      opacity: logoOpacity.value,
+    };
+  });
+
+  // Show loading state while fonts are loading
+  if (!fontsLoaded) {
+    return null;
+  }
 
   const validate = () => {
     const newErrors = { email: '', password: '' };
@@ -56,13 +94,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     if (!validate()) return;
 
     setLoading(true);
-    const { user, error } = await authService.signIn(email, password);
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Login Failed', error);
-    } else if (user) {
-      onLoginSuccess();
+    try {
+      const { user, error } = await authService.signIn(email, password);
+      
+      if (error) {
+        showErrorToast('Login Failed', error);
+      } else if (user) {
+        onLoginSuccess();
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,7 +113,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       style={styles.container}
     >
       <LinearGradient
-        colors={['#F8F9FA', '#FFFFFF']}
+        colors={['#EAF4F4', '#FFFFFF']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.gradient}
@@ -80,58 +121,65 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
-            {/* Header Area */}
-            <View style={styles.header}>
-              <Image
-                source={require('../../assets/logo.png.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-              <Text style={styles.title}>Welcome Back</Text>
-            </View>
+            {/* Premium Card Container */}
+            <View style={styles.cardContainer}>
+              {/* Header Area */}
+              <View style={styles.header}>
+                <Animated.View style={logoAnimatedStyle}>
+                  <Image
+                    source={require('../../assets/logo.png')}
+                    style={styles.logo}
+                    resizeMode="contain"
+                  />
+                </Animated.View>
+                <Text style={styles.title}>Welcome back! Let's find a clean spot.</Text>
+              </View>
 
-            {/* Login Form */}
-            <View style={styles.form}>
-              <Input
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="your@email.com"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                error={errors.email}
-                leftIcon="email-outline"
-              />
+              {/* Login Form */}
+              <View style={styles.form}>
+                <Input
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="your@email.com"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  error={errors.email}
+                  leftIcon="email-outline"
+                />
 
-              <Input
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Enter your password"
-                autoCapitalize="none"
-                error={errors.password}
-                leftIcon="lock-outline"
-                secureTextEntry
-                showPasswordToggle
-              />
-            </View>
+                <Input
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
+                  autoCapitalize="none"
+                  error={errors.password}
+                  leftIcon="lock-outline"
+                  secureTextEntry
+                  showPasswordToggle
+                />
+              </View>
 
-            <Button
-              title="Sign In"
-              onPress={handleLogin}
-              loading={loading}
-              className="mb-4"
-              style={{ backgroundColor: '#D90429' }}
-            />
+              <View style={styles.buttonContainer}>
+                <Button
+                  title="Sign In"
+                  onPress={handleLogin}
+                  loading={loading}
+                  disabled={loading}
+                />
+              </View>
 
-            {/* Sign Up Link */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-                <Text style={styles.footerLink}>Sign Up</Text>
-              </TouchableOpacity>
+              {/* Sign Up Link */}
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Don't have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+                  <Text style={styles.footerLink}>Sign Up</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -149,52 +197,65 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 40,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 48,
+    paddingHorizontal: 20,
+    minHeight: '100%',
+  },
+  cardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 48,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingVertical: 32,
-    paddingHorizontal: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    marginBottom: 36,
   },
   logo: {
-    width: 110,
-    height: 110,
-    marginBottom: 20,
+    width: 90,
+    height: 90,
+    marginBottom: 28,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#2B2D42',
+    color: '#1F2937',
+    textAlign: 'center',
+    lineHeight: 36,
+    fontFamily: 'Poppins_700Bold',
   },
   form: {
-    marginBottom: 24,
+    marginBottom: 28,
+  },
+  buttonContainer: {
+    marginBottom: 20,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 8,
   },
   footerText: {
-    color: '#2B2D42',
+    color: '#6B7280',
     fontSize: 15,
+    fontWeight: '400',
+    fontFamily: 'Nunito_400Regular',
   },
   footerLink: {
-    color: '#D90429',
+    color: '#D62828',
     fontWeight: '600',
     fontSize: 15,
+    fontFamily: 'Nunito_500Medium',
   },
 });
 

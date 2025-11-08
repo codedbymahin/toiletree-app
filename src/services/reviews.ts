@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Review } from '../types';
+import { sanitizeInput } from '../utils/sanitize';
 
 export const reviewsService = {
   /**
@@ -38,7 +39,10 @@ export const reviewsService = {
     reviewText: string
   ): Promise<{ success: boolean; error: string | null }> {
     try {
-      if (!reviewText.trim()) {
+      // Sanitize input (max 1000 characters for reviews)
+      const sanitizedReviewText = sanitizeInput(reviewText, 1000);
+      
+      if (!sanitizedReviewText.trim()) {
         throw new Error('Review text cannot be empty');
       }
 
@@ -50,7 +54,7 @@ export const reviewsService = {
         .insert({
           toilet_id: toiletId,
           user_id: user.id,
-          review_text: reviewText.trim(),
+          review_text: sanitizedReviewText,
         });
 
       if (error) throw error;

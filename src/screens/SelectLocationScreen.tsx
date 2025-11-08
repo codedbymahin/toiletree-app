@@ -2,17 +2,18 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
-  Alert,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SubmitStackParamList } from '../navigation/types';
+import { showErrorToast } from '../utils/toast';
+import { LoadingSpinner } from '../components';
 
 export { ToiletListScreen } from './ToiletListScreen';
 
@@ -25,6 +26,7 @@ const FALLBACK_LOCATION = {
 
 export const SelectLocationScreen = () => {
   const navigation = useNavigation<SubmitNavigationProp>();
+  const insets = useSafeAreaInsets();
   const [selectedLocation, setSelectedLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -33,6 +35,8 @@ export const SelectLocationScreen = () => {
   const [cameraCenter, setCameraCenter] = useState<[number, number] | null>(null);
   const [zoomLevel, setZoomLevel] = useState(14);
   const cameraRef = useRef<Mapbox.Camera>(null);
+  const cameraUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isProgrammaticUpdateRef = useRef(false);
 
   useEffect(() => {
     const initializeLocation = async () => {
@@ -40,13 +44,28 @@ export const SelectLocationScreen = () => {
         const { status } = await Location.requestForegroundPermissionsAsync();
 
         if (status !== 'granted') {
-          Alert.alert(
+          showErrorToast(
             'Location Permission',
             'Location access is required to center the map on your position. You can still select a location manually.'
           );
+          const fallbackCenter: [number, number] = [FALLBACK_LOCATION.longitude, FALLBACK_LOCATION.latitude];
           setSelectedLocation(FALLBACK_LOCATION);
-          setCameraCenter([FALLBACK_LOCATION.longitude, FALLBACK_LOCATION.latitude]);
+          setCameraCenter(fallbackCenter);
           setZoomLevel(14);
+          
+          // Set flag to prevent camera change handler from firing during initial setup
+          isProgrammaticUpdateRef.current = true;
+          if (cameraRef.current) {
+            cameraRef.current.setCamera({
+              centerCoordinate: fallbackCenter,
+              zoomLevel: 14,
+              animationDuration: 0,
+            });
+          }
+          setTimeout(() => {
+            isProgrammaticUpdateRef.current = false;
+          }, 100);
+          
           setLoading(false);
           return;
         }
@@ -56,17 +75,47 @@ export const SelectLocationScreen = () => {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         };
+        const initialCenter: [number, number] = [initialLocation.longitude, initialLocation.latitude];
 
         setSelectedLocation(initialLocation);
-        setCameraCenter([initialLocation.longitude, initialLocation.latitude]);
+        setCameraCenter(initialCenter);
         setZoomLevel(14);
+        
+        // Set flag to prevent camera change handler from firing during initial setup
+        isProgrammaticUpdateRef.current = true;
+        if (cameraRef.current) {
+          cameraRef.current.setCamera({
+            centerCoordinate: initialCenter,
+            zoomLevel: 14,
+            animationDuration: 0,
+          });
+        }
+        setTimeout(() => {
+          isProgrammaticUpdateRef.current = false;
+        }, 100);
+        
         setLoading(false);
       } catch (error) {
         console.error('Failed to get current location', error);
-        Alert.alert('Error', 'Unable to fetch your current location. Please move the map to select a spot.');
+        showErrorToast('Error', 'Unable to fetch your current location. Please move the map to select a spot.');
+        const fallbackCenter: [number, number] = [FALLBACK_LOCATION.longitude, FALLBACK_LOCATION.latitude];
         setSelectedLocation(FALLBACK_LOCATION);
-        setCameraCenter([FALLBACK_LOCATION.longitude, FALLBACK_LOCATION.latitude]);
+        setCameraCenter(fallbackCenter);
         setZoomLevel(14);
+        
+        // Set flag to prevent camera change handler from firing during initial setup
+        isProgrammaticUpdateRef.current = true;
+        if (cameraRef.current) {
+          cameraRef.current.setCamera({
+            centerCoordinate: fallbackCenter,
+            zoomLevel: 14,
+            animationDuration: 0,
+          });
+        }
+        setTimeout(() => {
+          isProgrammaticUpdateRef.current = false;
+        }, 100);
+        
         setLoading(false);
       }
     };
@@ -82,6 +131,45 @@ export const SelectLocationScreen = () => {
     }
   }, [cameraCenter]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (cameraUpdateTimeoutRef.current) {
+        clearTimeout(cameraUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  /**
+   * Handle camera changes when user moves/zooms the map
+   * Debounced to prevent infinite loops and excessive state updates
+   */
+  const handleCameraChanged = (state: any) => {
+    // Ignore camera changes if we're programmatically updating the camera
+    if (isProgrammaticUpdateRef.current) {
+      return;
+    }
+
+    // Clear existing timeout
+    if (cameraUpdateTimeoutRef.current) {
+      clearTimeout(cameraUpdateTimeoutRef.current);
+    }
+
+    // Debounce the state update - only update after user stops moving map for 200ms
+    cameraUpdateTimeoutRef.current = setTimeout(() => {
+      if (state?.properties?.center) {
+        const [longitude, latitude] = state.properties.center;
+        const zoom = state.properties.zoom ?? zoomLevel;
+        
+        // Update camera center state, which will trigger the useEffect to update selectedLocation
+        setCameraCenter([longitude, latitude]);
+        if (zoom !== zoomLevel) {
+          setZoomLevel(zoom);
+        }
+      }
+    }, 200); // 200ms debounce delay
+  };
+
   const recenterOnUser = async () => {
     try {
       const location = await Location.getCurrentPositionAsync({});
@@ -89,23 +177,37 @@ export const SelectLocationScreen = () => {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       };
+      
+      // Set flag to prevent camera change handler from firing during programmatic update
+      isProgrammaticUpdateRef.current = true;
+      
+      // Update state directly
+      const newCenter: [number, number] = [newLocation.longitude, newLocation.latitude];
+      setCameraCenter(newCenter);
+      setZoomLevel(14);
       setSelectedLocation(newLocation);
       
       if (cameraRef.current) {
         cameraRef.current.setCamera({
-          centerCoordinate: [newLocation.longitude, newLocation.latitude],
+          centerCoordinate: newCenter,
           zoomLevel: 14,
           animationDuration: 500,
         });
       }
+
+      // Reset flag after a short delay to allow camera to update
+      setTimeout(() => {
+        isProgrammaticUpdateRef.current = false;
+      }, 600); // Slightly longer than animation duration
     } catch (error) {
-      Alert.alert('Error', 'Unable to recenter on your location.');
+      showErrorToast('Error', 'Unable to recenter on your location.');
+      isProgrammaticUpdateRef.current = false;
     }
   };
 
   const handleConfirm = () => {
     if (!selectedLocation) {
-      Alert.alert('Select a location', 'Move the map to choose where the toilet should be.');
+      showErrorToast('Select a location', 'Move the map to choose where the toilet should be.');
       return;
     }
 
@@ -116,12 +218,7 @@ export const SelectLocationScreen = () => {
   };
 
   if (loading || !cameraCenter || !selectedLocation) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={styles.loadingText}>Loading map...</Text>
-      </View>
-    );
+    return <LoadingSpinner text="Finding your location..." />;
   }
 
   return (
@@ -129,22 +226,18 @@ export const SelectLocationScreen = () => {
       <Mapbox.MapView
         style={styles.map}
         styleURL={Mapbox.StyleURL.Street}
-        onRegionDidChange={(feature) => {
-          // When map region changes, update camera center
-          // The center marker shows the selected location
-          if (cameraCenter) {
-            // Update based on current center (this will be synced with Camera)
-            const [longitude, latitude] = cameraCenter;
-            setSelectedLocation({ latitude, longitude });
-          }
-        }}
+        onCameraChanged={handleCameraChanged}
       >
         <Mapbox.Camera
           ref={cameraRef}
-          centerCoordinate={cameraCenter}
-          zoomLevel={zoomLevel}
-          animationMode="flyTo"
-          animationDuration={0}
+          defaultSettings={
+            cameraCenter
+              ? {
+                  centerCoordinate: cameraCenter,
+                  zoomLevel: zoomLevel,
+                }
+              : undefined
+          }
         />
 
         <Mapbox.UserLocation
@@ -167,11 +260,14 @@ export const SelectLocationScreen = () => {
         </Text>
       </View>
 
-      <View style={styles.bottomSheet}>
-        <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-          <Text style={styles.confirmText}>Confirm Position</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Floating Action Button - Confirm */}
+      <TouchableOpacity 
+        style={styles.fabButton} 
+        onPress={handleConfirm} 
+        activeOpacity={0.8}
+      >
+        <MaterialCommunityIcons name="check" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -223,34 +319,21 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '600',
   },
-  bottomSheet: {
+  fabButton: {
     position: 'absolute',
-    bottom: 30,
-    left: 20,
+    bottom: 100,
     right: 20,
-  },
-  confirmButton: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  confirmText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#D62828',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#4B5563',
-    fontWeight: '500',
+    shadowColor: '#D62828',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
 });
 

@@ -2,8 +2,85 @@ import { supabase } from './supabase';
 import { Toilet } from '../types';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
+import { sanitizeInput } from '../utils/sanitize';
+
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ * Returns distance in kilometers
+ */
+function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 export const toiletsService = {
+  /**
+   * Get nearby toilets within a specified radius (in kilometers)
+   * Returns toilets sorted by distance (nearest first)
+   */
+  async getNearbyToilets(
+    userLat: number,
+    userLon: number,
+    radiusKm: number = 10
+  ): Promise<{ toilets: Toilet[]; error: string | null }> {
+    try {
+      // Calculate approximate bounding box for initial filter
+      // This reduces the number of toilets we need to calculate distance for
+      const latDelta = radiusKm / 111; // ~111 km per degree latitude
+      const lonDelta = radiusKm / (111 * Math.cos((userLat * Math.PI) / 180));
+
+      const minLat = userLat - latDelta;
+      const maxLat = userLat + latDelta;
+      const minLon = userLon - lonDelta;
+      const maxLon = userLon + lonDelta;
+
+      // Fetch toilets within bounding box
+      const { data, error } = await supabase
+        .from('toilets')
+        .select('*')
+        .eq('status', 'active')
+        .gte('latitude', minLat)
+        .lte('latitude', maxLat)
+        .gte('longitude', minLon)
+        .lte('longitude', maxLon);
+
+      if (error) throw error;
+
+      // Calculate distance for each toilet and filter by radius
+      const toiletsWithDistance = (data || [])
+        .map((toilet) => ({
+          ...toilet,
+          distance: calculateDistance(
+            userLat,
+            userLon,
+            toilet.latitude,
+            toilet.longitude
+          ),
+        }))
+        .filter((toilet) => toilet.distance <= radiusKm)
+        .sort((a, b) => a.distance - b.distance)
+        .map(({ distance, ...toilet }) => toilet); // Remove distance from final result
+
+      return { toilets: toiletsWithDistance, error: null };
+    } catch (error: any) {
+      return { toilets: [], error: error.message };
+    }
+  },
+
   /**
    * Fetch all active toilets, optionally filtered by map bounds
    */
@@ -28,6 +105,34 @@ export const toiletsService = {
       }
 
       const { data, error } = await query;
+
+      if (error) throw error;
+
+      return { toilets: data || [], error: null };
+    } catch (error: any) {
+      return { toilets: [], error: error.message };
+    }
+  },
+
+  /**
+   * Get toilets within a bounding box (visible map area)
+   * This function is optimized for map view queries
+   */
+  async getToiletsInBounds(bounds: {
+    minLat: number;
+    maxLat: number;
+    minLng: number;
+    maxLng: number;
+  }): Promise<{ toilets: Toilet[]; error: string | null }> {
+    try {
+      const { data, error } = await supabase
+        .from('toilets')
+        .select('*')
+        .eq('status', 'active')
+        .gte('latitude', bounds.minLat)
+        .lte('latitude', bounds.maxLat)
+        .gte('longitude', bounds.minLng)
+        .lte('longitude', bounds.maxLng);
 
       if (error) throw error;
 
@@ -72,6 +177,18 @@ export const toiletsService = {
     }
   ): Promise<{ success: boolean; error: string | null }> {
     try {
+      // Sanitize user inputs (max 200 characters for name, 300 for address)
+      const sanitizedName = sanitizeInput(name, 200);
+      const sanitizedAddress = sanitizeInput(address, 300);
+      
+      if (!sanitizedName.trim()) {
+        throw new Error('Toilet name is required');
+      }
+      
+      if (!sanitizedAddress.trim()) {
+        throw new Error('Address is required');
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('You must be logged in to submit a toilet');
 
@@ -92,8 +209,8 @@ export const toiletsService = {
       const { error } = await supabase
         .from('toilet_submissions')
         .insert({
-          name,
-          address,
+          name: sanitizedName,
+          address: sanitizedAddress,
           latitude,
           longitude,
           photo_url: photoUrl,

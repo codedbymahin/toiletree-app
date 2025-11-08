@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Report } from '../types';
+import { sanitizeInput } from '../utils/sanitize';
 
 export const reportsService = {
   /**
@@ -11,7 +12,10 @@ export const reportsService = {
     description: string
   ): Promise<{ success: boolean; error: string | null }> {
     try {
-      if (!description.trim()) {
+      // Sanitize input (max 500 characters for report descriptions)
+      const sanitizedDescription = sanitizeInput(description, 500);
+      
+      if (!sanitizedDescription.trim()) {
         throw new Error('Description cannot be empty');
       }
 
@@ -24,7 +28,7 @@ export const reportsService = {
           toilet_id: toiletId,
           user_id: user.id,
           issue_type: issueType,
-          description: description.trim(),
+          description: sanitizedDescription,
           status: 'open',
         });
 

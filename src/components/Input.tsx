@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { TextInput, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { TextInput, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useFonts, Nunito_400Regular, Nunito_500Medium } from '@expo-google-fonts/nunito';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface InputProps {
@@ -37,10 +38,20 @@ export const Input: React.FC<InputProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const actualSecureTextEntry = showPasswordToggle ? !showPassword : secureTextEntry;
 
+  // Load fonts
+  const [fontsLoaded] = useFonts({
+    Nunito_400Regular,
+    Nunito_500Medium,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
-    <View className={`mb-4 ${className}`}>
+    <View className={`mb-5 ${className}`}>
       {label && (
-        <Text className="text-gray-700 font-medium mb-2">{label}</Text>
+        <Text style={styles.label}>{label}</Text>
       )}
       <View
         style={[
@@ -53,7 +64,7 @@ export const Input: React.FC<InputProps> = ({
           <MaterialCommunityIcons
             name={leftIcon as any}
             size={20}
-            color={isFocused ? '#2563EB' : '#9CA3AF'}
+            color={isFocused ? '#D62828' : '#9CA3AF'}
             style={styles.leftIcon}
           />
         )}
@@ -91,18 +102,25 @@ export const Input: React.FC<InputProps> = ({
         )}
       </View>
       {error && (
-        <Text className="text-red-500 text-sm mt-1">{error}</Text>
+        <Text style={styles.errorText}>{error}</Text>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+    fontFamily: 'Nunito_500Medium',
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E5E7EB',
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
@@ -112,14 +130,16 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   inputContainerFocused: {
-    borderColor: '#2563EB',
-    shadowColor: '#2563EB',
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: '#D62828',
+    borderWidth: 1,
+    shadowColor: '#D62828',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   inputContainerError: {
-    borderColor: '#EF4444',
+    borderColor: '#D62828',
   },
   leftIcon: {
     marginLeft: 16,
@@ -130,6 +150,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     paddingVertical: 14,
     paddingHorizontal: 16,
+    fontFamily: 'Nunito_400Regular',
   },
   textInputWithIcon: {
     paddingLeft: 8,
@@ -144,6 +165,12 @@ const styles = StyleSheet.create({
   toggleButton: {
     padding: 8,
     marginRight: 8,
+  },
+  errorText: {
+    color: '#D62828',
+    fontSize: 13,
+    marginTop: 6,
+    fontFamily: 'Nunito_400Regular',
   },
 });
 

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Alert } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import { Input, Button } from '../components';
 import { reportsService } from '../services/reports';
+import { showSuccessToast, showErrorToast } from '../utils/toast';
 
 export const ReportIssueScreen = () => {
   const route = useRoute();
@@ -47,18 +48,16 @@ export const ReportIssueScreen = () => {
     setLoading(false);
 
     if (submitError) {
-      Alert.alert('Error', submitError);
+      showErrorToast('Error', submitError);
     } else {
-      Alert.alert(
+      showSuccessToast(
         'Report Submitted',
-        'Thank you for reporting this issue. An admin will review it soon.',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
+        'Thank you for reporting this issue. An admin will review it soon.'
       );
+      // Navigate back after toast is shown
+      setTimeout(() => {
+        navigation.goBack();
+      }, 2000);
     }
   };
 

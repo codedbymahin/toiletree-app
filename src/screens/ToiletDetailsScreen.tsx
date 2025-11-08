@@ -5,9 +5,12 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  Alert,
   Linking,
+  StyleSheet,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { Nunito_400Regular, Nunito_500Medium } from '@expo-google-fonts/nunito';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -17,6 +20,7 @@ import { StarRating, ReviewItem, LoadingSpinner, Input, Button } from '../compon
 import { toiletsService } from '../services/toilets';
 import { ratingsService } from '../services/ratings';
 import { reviewsService } from '../services/reviews';
+import { showSuccessToast, showErrorToast } from '../utils/toast';
 
 export const ToiletDetailsScreen = () => {
   const route = useRoute();
@@ -37,6 +41,13 @@ export const ToiletDetailsScreen = () => {
   const [reviewText, setReviewText] = useState('');
   const [loading, setLoading] = useState(!initialToilet);
   const [submittingReview, setSubmittingReview] = useState(false);
+
+  // Load custom fonts
+  const [fontsLoaded] = useFonts({
+    Poppins_700Bold,
+    Nunito_400Regular,
+    Nunito_500Medium,
+  });
 
   useEffect(() => {
     loadToiletDetails();
@@ -101,7 +112,7 @@ export const ToiletDetailsScreen = () => {
     const { toilet: fetchedToilet, error } = await toiletsService.getToiletById(toiletId);
     
     if (error) {
-      Alert.alert('Error', 'Failed to load toilet details');
+      showErrorToast('Error', 'Failed to load toilet details');
     } else {
       setToilet(fetchedToilet);
     }
@@ -128,10 +139,10 @@ export const ToiletDetailsScreen = () => {
     const { success, error } = await ratingsService.rateToilet(toiletId, stars);
     
     if (error) {
-      Alert.alert('Error', error);
+      showErrorToast('Error', error);
     } else {
       setUserRating(stars);
-      Alert.alert('Success', 'Rating submitted!');
+      showSuccessToast('Success', 'Rating submitted!');
       // Refresh toilet details to update average rating
       loadToiletDetails();
     }
@@ -139,7 +150,7 @@ export const ToiletDetailsScreen = () => {
 
   const handleSubmitReview = async () => {
     if (!reviewText.trim()) {
-      Alert.alert('Error', 'Please enter a review');
+      showErrorToast('Error', 'Please enter a review');
       return;
     }
 
@@ -148,9 +159,9 @@ export const ToiletDetailsScreen = () => {
     setSubmittingReview(false);
 
     if (error) {
-      Alert.alert('Error', error);
+      showErrorToast('Error', error);
     } else {
-      Alert.alert('Success', 'Review submitted!');
+      showSuccessToast('Success', 'Review submitted!');
       setReviewText('');
       loadReviews();
     }
@@ -175,169 +186,422 @@ export const ToiletDetailsScreen = () => {
     } as never);
   };
 
-  if (loading) {
+  if (!fontsLoaded || loading) {
     return <LoadingSpinner message="Loading details..." />;
   }
 
   if (!toilet) {
     return (
-      <View className="flex-1 justify-center items-center p-6">
-        <Text className="text-gray-600">Toilet not found</Text>
-      </View>
+      <LinearGradient
+        colors={['#EAF4F4', '#FFFFFF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.gradientContainer}
+      >
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Toilet not found</Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <ScrollView className="flex-1 bg-white">
-      {/* Toilet Image */}
-      {toilet.photo_url ? (
-        <Image
-          source={{ uri: toilet.photo_url }}
-          className="w-full h-64"
-          resizeMode="cover"
-        />
-      ) : (
-        <View className="w-full h-64 bg-gray-200 justify-center items-center">
-          <MaterialCommunityIcons name="camera-off-outline" size={64} color="#9CA3AF" />
-        </View>
-      )}
-
-      <View className="p-6">
-        {/* Name and Address */}
-        <Text className="text-2xl font-bold text-gray-800 mb-2">
-          {toilet.name}
-        </Text>
-        <Text className="text-gray-600 mb-4">{toilet.address}</Text>
-
-        {/* Feature Tags */}
-        <View className="flex-row flex-wrap mb-6">
-          {toilet.is_female_friendly && (
-            <View className="flex-row items-center bg-pink-100 px-3 py-2 rounded-full mr-2 mb-2">
-              <MaterialCommunityIcons name="gender-female" size={18} color="#BE185D" style={{ marginRight: 4 }} />
-              <Text className="text-pink-700 font-medium">Female Friendly</Text>
-            </View>
-          )}
-          {toilet.has_water_access && (
-            <View className="flex-row items-center bg-blue-100 px-3 py-2 rounded-full mr-2 mb-2">
-              <MaterialCommunityIcons name="water" size={18} color="#1E40AF" style={{ marginRight: 4 }} />
-              <Text className="text-blue-700 font-medium">Water Available</Text>
-            </View>
-          )}
-          {toilet.is_paid && (
-            <View className="flex-row items-center bg-yellow-100 px-3 py-2 rounded-full mr-2 mb-2">
-              <MaterialCommunityIcons name="cash" size={18} color="#B45309" style={{ marginRight: 4 }} />
-              <Text className="text-yellow-700 font-medium">Paid</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Average Rating */}
-        {toilet.average_rating !== undefined && toilet.average_rating > 0 && (
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">
-              Average Rating
-            </Text>
-            <StarRating
-              rating={toilet.average_rating}
-              size={28}
-              showNumber
+    <LinearGradient
+      colors={['#EAF4F4', '#FFFFFF']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.container}
+    >
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Toilet Image */}
+        {toilet.photo_url ? (
+          <Image
+            source={{ uri: toilet.photo_url }}
+            style={styles.toiletImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.placeholderImage}>
+            <Image
+              source={require('../../assets/logo.png')}
+              style={styles.logoPlaceholder}
+              resizeMode="contain"
             />
           </View>
         )}
 
-        {/* User Rating - Only show for logged in users */}
-        {user && (
-          <View className="mb-6">
-            <Text className="text-gray-700 font-medium mb-2">
-              {userRating > 0 ? 'Your Rating (tap to change)' : 'Rate This Toilet'}
-            </Text>
-            <StarRating
-              rating={userRating}
-              onRatingChange={handleRateToilet}
-              interactive
-              size={32}
-            />
-          </View>
-        )}
+        {/* Content Card */}
+        <View style={styles.contentCard}>
+          {/* Name and Address */}
+          <Text style={styles.toiletName}>
+            {toilet.name}
+          </Text>
+          <Text style={styles.toiletAddress}>{toilet.address}</Text>
 
-        {/* Guest Login Prompt */}
-        {!user && (
-          <View className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <Text className="text-blue-800 font-semibold mb-2">
-              Sign in to rate and review
-            </Text>
-            <Text className="text-blue-600 text-sm mb-3">
-              Create an account to rate toilets and share your experience with the community.
-            </Text>
+          {/* Feature Tags */}
+          <View style={styles.tagsContainer}>
+            {toilet.is_female_friendly && (
+              <View style={styles.tagFemaleFriendly}>
+                <MaterialCommunityIcons name="gender-female" size={16} color="#BE185D" style={{ marginRight: 6 }} />
+                <Text style={styles.tagText}>Female Friendly</Text>
+              </View>
+            )}
+            {toilet.has_water_access && (
+              <View style={styles.tagWater}>
+                <MaterialCommunityIcons name="water" size={16} color="#1E40AF" style={{ marginRight: 6 }} />
+                <Text style={styles.tagText}>Water Available</Text>
+              </View>
+            )}
+            {toilet.is_paid && (
+              <View style={styles.tagPaid}>
+                <MaterialCommunityIcons name="cash" size={16} color="#B45309" style={{ marginRight: 6 }} />
+                <Text style={styles.tagText}>Paid</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Average Rating */}
+          {toilet.average_rating !== undefined && toilet.average_rating > 0 && (
+            <View style={styles.ratingSection}>
+              <Text style={styles.sectionLabel}>
+                Average Rating
+              </Text>
+              <StarRating
+                rating={toilet.average_rating}
+                size={28}
+                showNumber
+              />
+            </View>
+          )}
+
+          {/* User Rating - Only show for logged in users */}
+          {user && (
+            <View style={styles.userRatingSection}>
+              <Text style={styles.sectionLabel}>
+                {userRating > 0 ? 'Your Rating (tap to change)' : 'Rate This Toilet'}
+              </Text>
+              <StarRating
+                rating={userRating}
+                onRatingChange={handleRateToilet}
+                interactive
+                size={32}
+              />
+            </View>
+          )}
+
+          {/* Guest Login Prompt */}
+          {!user && (
+            <View style={styles.guestPrompt}>
+              <Text style={styles.guestPromptTitle}>
+                Sign in to rate and review
+              </Text>
+              <Text style={styles.guestPromptText}>
+                Create an account to rate toilets and share your experience with the community.
+              </Text>
+              <TouchableOpacity
+                onPress={redirectToAuth}
+                style={styles.guestPromptButton}
+              >
+                <Text style={styles.guestPromptButtonText}>
+                  Sign In or Sign Up
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtonsContainer}>
             <TouchableOpacity
-              onPress={redirectToAuth}
-              className="bg-blue-600 py-2 px-4 rounded-lg"
+              onPress={handleGetDirections}
+              style={styles.primaryButton}
+              activeOpacity={0.8}
             >
-              <Text className="text-white text-center font-semibold">
-                Sign In or Sign Up
+              <Text style={styles.primaryButtonText}>
+                Get Directions
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleReportIssue}
+              style={styles.outlineButton}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.outlineButtonText}>
+                Report Issue
               </Text>
             </TouchableOpacity>
           </View>
-        )}
 
-        {/* Action Buttons */}
-        <View className="flex-row mb-6">
-          <TouchableOpacity
-            onPress={handleGetDirections}
-            className="flex-1 bg-blue-600 py-3 rounded-lg mr-2"
-          >
-            <Text className="text-white text-center font-semibold">
-              Get Directions
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleReportIssue}
-            className="flex-1 bg-red-600 py-3 rounded-lg ml-2"
-          >
-            <Text className="text-white text-center font-semibold">
-              Report Issue
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Add Review - Only show for logged in users */}
-        {user && (
-          <View className="mb-6">
-            <Text className="text-lg font-bold text-gray-800 mb-3">
-              Write a Review
-            </Text>
-            <Input
-              value={reviewText}
-              onChangeText={setReviewText}
-              placeholder="Share your experience..."
-              multiline
-              numberOfLines={4}
-            />
-            <Button
-              title="Submit Review"
-              onPress={handleSubmitReview}
-              loading={submittingReview}
-            />
-          </View>
-        )}
-
-        {/* Reviews List */}
-        <View>
-          <Text className="text-lg font-bold text-gray-800 mb-3">
-            Reviews ({reviews.length})
-          </Text>
-          {reviews.length > 0 ? (
-            reviews.map((review) => (
-              <ReviewItem key={review.id} review={review} />
-            ))
-          ) : (
-            <Text className="text-gray-500 text-center py-4">
-              No reviews yet. Be the first to review!
-            </Text>
+          {/* Add Review - Only show for logged in users */}
+          {user && (
+            <View style={styles.reviewSection}>
+              <Text style={styles.sectionTitle}>
+                Write a Review
+              </Text>
+              <View style={styles.reviewInputContainer}>
+                <Input
+                  value={reviewText}
+                  onChangeText={setReviewText}
+                  placeholder="Share your experience..."
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={handleSubmitReview}
+                disabled={submittingReview}
+                style={[styles.primaryButton, styles.submitReviewButton, submittingReview && styles.buttonDisabled]}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {submittingReview ? 'Submitting...' : 'Submit Review'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
+
+          {/* Reviews List */}
+          <View style={styles.reviewsListSection}>
+            <Text style={styles.sectionTitle}>
+              Reviews ({reviews.length})
+            </Text>
+            {reviews.length > 0 ? (
+              reviews.map((review) => (
+                <ReviewItem key={review.id} review={review} />
+              ))
+            ) : (
+              <Text style={styles.noReviewsText}>
+                No reviews yet. Be the first to review!
+              </Text>
+            )}
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </LinearGradient>
   );
 };
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  gradientContainer: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontFamily: 'Nunito_400Regular',
+  },
+  toiletImage: {
+    width: '100%',
+    height: 280,
+  },
+  placeholderImage: {
+    width: '100%',
+    height: 280,
+    backgroundColor: '#EAF4F4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoPlaceholder: {
+    width: 80,
+    height: 80,
+    opacity: 0.5,
+  },
+  contentCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 32,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    marginTop: -20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  toiletName: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 12,
+    fontFamily: 'Poppins_700Bold',
+  },
+  toiletAddress: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginBottom: 28,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 24,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 32,
+  },
+  tagFemaleFriendly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FCE7F3',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  tagWater: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  tagPaid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  tagText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+    fontFamily: 'Nunito_500Medium',
+  },
+  ratingSection: {
+    marginBottom: 32,
+  },
+  userRatingSection: {
+    marginBottom: 32,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
+    fontFamily: 'Nunito_500Medium',
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 20,
+    fontFamily: 'Poppins_700Bold',
+  },
+  guestPrompt: {
+    backgroundColor: '#F3F4F6',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  guestPromptTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+    fontFamily: 'Nunito_500Medium',
+  },
+  guestPromptText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 20,
+  },
+  guestPromptButton: {
+    backgroundColor: '#D62828',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  guestPromptButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'Nunito_500Medium',
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    marginBottom: 32,
+  },
+  primaryButton: {
+    flex: 1,
+    backgroundColor: '#D62828',
+    minHeight: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+    shadowColor: '#D62828',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: 'Nunito_500Medium',
+  },
+  outlineButton: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    minHeight: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  outlineButtonText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'Nunito_500Medium',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  reviewSection: {
+    marginBottom: 32,
+  },
+  reviewInputContainer: {
+    marginBottom: 20,
+  },
+  submitReviewButton: {
+    marginTop: 0,
+  },
+  reviewsListSection: {
+    marginTop: 8,
+  },
+  noReviewsText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingVertical: 32,
+    fontFamily: 'Nunito_400Regular',
+  },
+});
